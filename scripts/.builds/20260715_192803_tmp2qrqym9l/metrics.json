@@ -1,0 +1,82 @@
+{
+  "planning_time_ms": 1,
+  "generation_time_ms": 0,
+  "validation_time_ms": 0,
+  "bench_time_ms": 2,
+  "browser_time_ms": 0,
+  "total_time_ms": 7,
+  "tasks_total": 13,
+  "tasks_completed": 12,
+  "tasks_failed": 0,
+  "tasks_blocked": 0,
+  "tasks_skipped": 1,
+  "repair_count": 0,
+  "retry_count": 0,
+  "generated_files": 4,
+  "modified_files": 0,
+  "critical_issues": 0,
+  "warnings": 0,
+  "success_rate": 92.3,
+  "phases": [
+    {
+      "name": "planning",
+      "duration_ms": 1
+    },
+    {
+      "name": "task_T1",
+      "duration_ms": 0
+    },
+    {
+      "name": "task_T2",
+      "duration_ms": 0
+    },
+    {
+      "name": "task_T3",
+      "duration_ms": 0
+    },
+    {
+      "name": "task_T4",
+      "duration_ms": 0
+    },
+    {
+      "name": "task_T5",
+      "duration_ms": 0
+    },
+    {
+      "name": "task_T6",
+      "duration_ms": 0
+    },
+    {
+      "name": "task_T7",
+      "duration_ms": 0
+    },
+    {
+      "name": "task_T8",
+      "duration_ms": 0
+    },
+    {
+      "name": "task_T9",
+      "duration_ms": 0
+    },
+    {
+      "name": "task_T10",
+      "duration_ms": 0
+    },
+    {
+      "name": "task_T12",
+      "duration_ms": 0
+    },
+    {
+      "name": "task_T13",
+      "duration_ms": 0
+    },
+    {
+      "name": "validation",
+      "duration_ms": 0
+    },
+    {
+      "name": "bench",
+      "duration_ms": 2
+    }
+  ]
+}

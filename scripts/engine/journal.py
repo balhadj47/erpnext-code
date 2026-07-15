@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from .interfaces import BuildMetrics, IJournal, Task, TaskResult, TaskStatus
+from .metrics import TimingMetrics  # C1: TimingMetrics from metrics module
 
 
 class BuildJournal(IJournal):
@@ -101,7 +102,7 @@ class BuildJournal(IJournal):
             })
             (build_dir / "fixes.json").write_text(json.dumps(fixes, indent=2))
 
-    def record_metrics(self, build_id: str, metrics: BuildMetrics):
+    def record_metrics(self, build_id: str, metrics: BuildMetrics | TimingMetrics):  # C1: accept both metrics types
         """Record final build metrics."""
         build_dir = self.builds_dir / build_id
         if not build_dir.exists():
@@ -127,71 +128,14 @@ class BuildJournal(IJournal):
             (build_dir / "browser.log").write_text(output)
 
     def write_report(self, build_id: str, tasks: list[Task] | None = None,
-                     metrics: BuildMetrics | None = None) -> str:
-        """Generate final_report.md."""
+                     metrics: BuildMetrics | TimingMetrics | None = None,
+                     gates_summary: dict | None = None) -> str:
+        """Generate unified final_report.md with build summary and health analysis. (H8: consolidated from write_report+write_health_report)"""
         build_dir = self.builds_dir / build_id
         if not build_dir.exists():
             return ""
 
         # Collect data
-        gen_files = self._load_json(build_dir / "generated_files.json", [])
-        fixes = self._load_json(build_dir / "fixes.json", [])
-        retries = self._load_json(build_dir / "retries.json", [])
-
-        completed = sum(1 for f in gen_files if f.get("validated"))
-        total = len(gen_files)
-
-        report = f"""# Build Report — {build_id}
-
-**Goal:** {self._load_json(build_dir / 'plan.json', {}).get('goal', 'Unknown')}
-**Finished:** {datetime.now().isoformat()}
-
-## Summary
-
-| Metric | Value |
-|--------|-------|
-| Generated files | {total} |
-| Validated files | {completed} |
-| Fixes applied | {sum(len(f.get('fixes', [])) for f in fixes)} |
-| Retries | {len(retries)} |
-| Final status | {'✅ Success' if metrics and metrics.tasks_failed == 0 else '⚠️ Issues found'} |
-
-## Files Generated
-
-"""
-        for gf in gen_files:
-            icon = "✓" if gf.get("validated") else "✗"
-            report += f"- {icon} `{gf.get('path', 'unknown')}` ({gf.get('category', '?')}) [T{gf.get('task_id', '?')}]\n"
-
-        report += "\n## Fixes Applied\n\n"
-        for fix in fixes:
-            report += f"### T{fix.get('task_id', '?')}\n"
-            for f in fix.get("fixes", []):
-                report += f"- {f}\n"
-            report += "\n"
-
-        if not fixes:
-            report += "No fixes were needed.\n"
-
-        report += "\n## Retries\n\n"
-        for r in retries:
-            report += f"- T{r.get('task_id', '?')}: {r.get('attempt', '?')} attempts — {r.get('error', '')[:100]}\n"
-
-        if not retries:
-            report += "No retries were needed.\n"
-
-        report_path = build_dir / "final_report.md"
-        report_path.write_text(report)
-        return str(report_path)
-
-    def write_health_report(self, build_id: str, gates_summary: dict | None = None,
-                            metrics: dict | None = None, tasks: list | None = None,
-                            issues: list | None = None, repairs: list | None = None) -> str:
-        """Phase 11.7: Generate build_health.md with comprehensive analysis."""
-        build_dir = self.builds_dir / build_id
-        if not build_dir.exists():
-            return ""
-
         gen_files = self._load_json(build_dir / "generated_files.json", [])
         fixes = self._load_json(build_dir / "fixes.json", [])
         retries = self._load_json(build_dir / "retries.json", [])
@@ -205,41 +149,62 @@ class BuildJournal(IJournal):
         if gates_summary and gates_summary.get("failed", 0) > 0 and gates_summary.get("passed", 0) > 0:
             health = "DEGRADED"
 
-        report = f"""# Build Health Report — {build_id}
+        metric_dict = metrics.to_dict() if metrics and hasattr(metrics, 'to_dict') else {}
 
+        report = f"""# Build Report — {build_id}
+
+**Goal:** {self._load_json(build_dir / 'plan.json', {}).get('goal', 'Unknown')}
 **Status:** {health}
-**Generated:** {datetime.now().isoformat()}
+**Finished:** {datetime.now().isoformat()}
 
 ## Summary
 
-| Metric | Value |
-|--------|-------|
-| Files generated | {total_files} |
-| Files validated | {validated} ({int(validated/total_files*100) if total_files else 0}%) |
-| Fixes applied | {total_fixes} |
-| Retries | {total_retries} |
+- Generated files: {total_files}
+- Validated files: {validated} ({int(validated/total_files*100) if total_files else 0}%)
+- Fixes applied: {total_fixes}
+- Retries: {total_retries}
+- Final status: {'✅ Success' if (hasattr(metrics, 'tasks_failed') and metrics.tasks_failed == 0) else '⚠️ Issues found'}
+
+## Quality Gates
 
 """
-
         if gates_summary:
-            report += "## Quality Gates\n\n"
             for name, gate in gates_summary.get("gates", {}).items():
                 icon = "PASS" if gate["status"] == "passed" else "FAIL" if gate["status"] == "failed" else gate["status"]
                 report += f"- {icon}: {name}\n"
             report += f"\n**Result:** {gates_summary['passed']}/{gates_summary['total']} passed, {gates_summary['failed']} failed\n\n"
+        else:
+            report += "No gate data available.\n\n"
 
-        if metrics:
-            report += "## Performance\n\n"
-            for phase in metrics.get("phases", []):
-                report += f"- {phase['name']}: {phase['duration_ms']}ms\n"
-            report += f"\n- Success rate: {metrics.get('success_rate', 0)}%\n"
-            report += f"- Repairs: {metrics.get('repair_count', 0)}\n"
-            report += f"- Critical issues: {metrics.get('critical_issues', 0)}\n"
+        report += "## Files Generated\n\n"
+        for gf in gen_files:
+            icon = "✓" if gf.get("validated") else "✗"
+            report += f"- {icon} `{gf.get('path', 'unknown')}` ({gf.get('category', '?')}) [T{gf.get('task_id', '?')}]\n"
 
         if fixes:
-            report += "\n## Repairs\n\n"
+            report += "\n## Fixes Applied\n\n"
             for fix in fixes:
-                report += f"- T{fix.get('task_id', '?')}: {', '.join(fix.get('fixes', []))}\n"
+                report += f"### T{fix.get('task_id', '?')}\n"
+                for f in fix.get("fixes", []):
+                    report += f"- {f}\n"
+                report += "\n"
+        else:
+            report += "\n## Fixes Applied\n\nNo fixes were needed.\n"
+
+        if retries:
+            report += "\n## Retries\n\n"
+            for r in retries:
+                report += f"- T{r.get('task_id', '?')}: {r.get('attempt', '?')} attempts — {r.get('error', '')[:100]}\n"
+        else:
+            report += "\n## Retries\n\nNo retries were needed.\n"
+
+        if metric_dict:
+            report += "\n## Performance\n\n"
+            for phase in metric_dict.get("phases", []):
+                report += f"- {phase['name']}: {phase['duration_ms']}ms\n"
+            report += f"\n- Success rate: {metric_dict.get('success_rate', 0)}%\n"
+            report += f"- Repairs: {metric_dict.get('repair_count', 0)}\n"
+            report += f"- Critical issues: {metric_dict.get('critical_issues', 0)}\n"
 
         report += "\n## Recommendations\n\n"
         if total_retries > 2:
@@ -251,7 +216,7 @@ class BuildJournal(IJournal):
         if not fixes and not retries:
             report += "- Zero repairs — build clean\n"
 
-        report_path = build_dir / "build_health.md"
+        report_path = build_dir / "final_report.md"
         report_path.write_text(report)
         return str(report_path)
 

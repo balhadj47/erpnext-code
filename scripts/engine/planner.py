@@ -10,7 +10,9 @@ import re
 from pathlib import Path
 from typing import Any
 
+from .hooks_parser import HooksParser  # H7: AST-based parsing replaces regex
 from .interfaces import ArtifactGraph, DocTypeDef
+from .templates import MODULE_TEMPLATES  # C2: single source of truth
 
 
 class ArtifactGraphBuilder:
@@ -75,12 +77,8 @@ class ArtifactGraphBuilder:
         path = root / "hooks.py"
         if not path.exists():
             return {}
-        content = path.read_text()
-        return {
-            "fixtures": self._extract_list(content, "fixtures"),
-            "doc_events": self._extract_dict_keys(content, "doc_events"),
-            "scheduler_events": self._extract_dict_keys(content, "scheduler_events"),
-        }
+        parser = HooksParser.from_file(path)  # H7: AST-based parsing
+        return parser.parse_hooks()
 
     def _read_patches(self, root: Path) -> list[str]:
         path = root / "patches.txt"
@@ -194,48 +192,46 @@ class ArtifactGraphBuilder:
         result.extend(remaining)
         return result
 
-    def _extract_list(self, content: str, key: str) -> list:
-        match = re.search(rf'{key}\s*=\s*\[(.*?)\]', content, re.DOTALL)
-        if not match:
-            return []
-        return re.findall(r'["\']([^"\']+)["\']', match.group(1))
+    def _find_by_pattern(self, root: Path, pattern: str) -> list[str]:
+        """Find files matching a glob pattern."""
+        return [str(p.relative_to(root)) for p in root.glob(pattern) if p.is_file()]
 
-    def _extract_dict_keys(self, content: str, key: str) -> list:
-        match = re.search(rf'{key}\s*=\s*\{{\s*(.*?)\}}', content, re.DOTALL)
-        if not match:
-            return []
-        return re.findall(r'"([^"]+)"\s*:', match.group(1))
+    def _resolve_dependencies(self, graph: ArtifactGraph) -> list[str]:
+        """Topological sort of all DocTypes based on Link field dependencies."""
+        all_dts = {**graph.doctypes, **graph.child_tables}
+        in_degree: dict[str, int] = {}
+        adjacency: dict[str, set[str]] = {}
+
+        for name in all_dts:
+            in_degree[name] = 0
+            adjacency[name] = set()
+
+        for name, dt in all_dts.items():
+            for dep in dt.link_fields:
+                if dep in all_dts:
+                    adjacency[name].add(dep)
+                    in_degree[name] = in_degree.get(name, 0) + 1
+
+        # Kahn's algorithm
+        queue = [name for name, deg in in_degree.items() if deg == 0]
+        result = []
+
+        while queue:
+            node = queue.pop(0)
+            result.append(node)
+            for name in all_dts:
+                if node in adjacency.get(name, set()):
+                    in_degree[name] -= 1
+                    if in_degree[name] == 0:
+                        queue.append(name)
+
+        remaining = [n for n in all_dts if n not in result]
+        result.extend(remaining)
+        return result
 
 
 class TaskPlanner:
     """Phase 3: Generate ordered task list from goal + artifact graph."""
-
-    MODULE_TEMPLATES = {
-        "field_service": {
-            "doctypes": ["Site Visit", "Inspection Report", "Work Order", "Crew", "Equipment"],
-            "child_tables": ["Site Visit Photo", "Inspection Checklist Item", "Crew Member"],
-        },
-        "contractor": {
-            "doctypes": ["Contractor", "Contract", "Compliance Check", "Trade", "Site"],
-            "child_tables": ["Contractor Document", "Compliance Item"],
-        },
-        "hr_extended": {
-            "doctypes": ["Training Program", "Training Event", "Certification", "Skill Matrix"],
-            "child_tables": ["Training Attendee", "Skill Assessment Item"],
-        },
-        "inventory_extended": {
-            "doctypes": ["Stocktake", "Stock Reconciliation", "Quality Check", "Batch Trace"],
-            "child_tables": ["Stocktake Item", "Quality Check Item"],
-        },
-        "project_extended": {
-            "doctypes": ["Project Phase", "Resource Allocation", "Progress Report", "Variation Order"],
-            "child_tables": ["Phase Task", "Resource Item", "Variation Item"],
-        },
-        "maintenance": {
-            "doctypes": ["Asset Maintenance Log", "Preventive Schedule", "Breakdown Report", "Spare Part"],
-            "child_tables": ["Maintenance Task", "Part Used"],
-        },
-    }
 
     def plan(self, goal: str, graph: ArtifactGraph) -> list:
         """Generate ordered task list."""
@@ -246,7 +242,7 @@ class TaskPlanner:
         # Detect module template
         module_key = None
         goal_lower = goal.lower()
-        for key in self.MODULE_TEMPLATES:
+        for key in MODULE_TEMPLATES:
             if key in goal_lower:
                 module_key = key
                 break
@@ -259,7 +255,7 @@ class TaskPlanner:
 
         # Phase 2: DocTypes (dependency-ordered)
         if module_key:
-            tmpl = self.MODULE_TEMPLATES[module_key]
+            tmpl = MODULE_TEMPLATES[module_key]
             all_dts = tmpl["doctypes"] + tmpl["child_tables"]
             builder = ArtifactGraphBuilder()
             # Build a dependency graph from the template

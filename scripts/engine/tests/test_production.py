@@ -22,7 +22,7 @@ from engine.interfaces import (
     TaskStatus,
 )
 from engine.gates import GateRunner, GateStatus
-from engine.metrics import MetricsCollector, BuildMetrics
+from engine.metrics import MetricsCollector, TimingMetrics as BuildMetrics
 from engine.rollback import RollbackManager, FileSnapshot
 from engine.scheduler import ParallelScheduler
 from engine.plugins import discover_plugins
@@ -197,8 +197,8 @@ class TestHealthReport:
         with tempfile.TemporaryDirectory() as tmp:
             journal = BuildJournal(builds_dir=tmp)
             build_id = journal.start_build("test", "/fake")
-            path = journal.write_health_report(build_id, {"passed": 5, "total": 5, "failed": 0, "gates": {}})
-            assert "build_health.md" in path
+            path = journal.write_report(build_id, gates_summary={"passed": 5, "total": 5, "failed": 0, "gates": {}})
+            assert "final_report.md" in path
             content = Path(path).read_text()
             assert "HEALTHY" in content
 

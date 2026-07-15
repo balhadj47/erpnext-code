@@ -11,11 +11,16 @@ Usage:
 
 import json
 import os
-import re
 import sys
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
+
+# H7: Use AST-based parsing instead of regex
+try:
+    from engine.hooks_parser import HooksParser
+except ImportError:
+    from scripts.engine.hooks_parser import HooksParser
 
 
 def green(s: str) -> str: return f"\033[32m{s}\033[0m"
@@ -71,37 +76,8 @@ class ERPNextAnalyzer:
             self.issues.append({"severity": "critical", "file": "hooks.py", "msg": "hooks.py not found — app is broken"})
             return {}
 
-        content = path.read_text()
-        hooks = {
-            "fixtures": self._extract_list(content, "fixtures"),
-            "doc_events": self._extract_dict_keys(content, "doc_events"),
-            "scheduler_events": self._extract_dict_keys(content, "scheduler_events"),
-            "website_context": self._extract_dict_keys(content, "website_context"),
-            "jenv": self._extract_dict_keys(content, "jenv"),
-            "app_include_js": self._extract_list(content, "app_include_js"),
-            "app_include_css": self._extract_list(content, "app_include_css"),
-            "override_doctype_class": self._extract_dict_keys(content, "override_doctype_class"),
-        }
-        return hooks
-
-    def _extract_list(self, content: str, key: str) -> list:
-        """Extract a Python list assigned to a variable."""
-        pattern = rf'{key}\s*=\s*\[(.*?)\]'
-        match = re.search(pattern, content, re.DOTALL)
-        if not match:
-            return []
-        items = re.findall(r'["\']([^"\']+)["\']', match.group(1))
-        return items
-
-    def _extract_dict_keys(self, content: str, key: str) -> list:
-        """Extract top-level keys from a dict assigned to a variable."""
-        pattern = rf'{key}\s*=\s*\{{\s*(.*?)\}}'
-        match = re.search(pattern, content, re.DOTALL)
-        if not match:
-            return []
-        # Find string keys at top level
-        keys = re.findall(r'"([^"]+)"\s*:', match.group(1))
-        return keys
+        parser = HooksParser.from_file(path)  # H7: AST-based parsing
+        return parser.parse_hooks()
 
     def _read_modules(self) -> list:
         path = self.app_path / "modules.txt"

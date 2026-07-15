@@ -7,6 +7,7 @@ Rollback restores: files, generated artifacts, journal state.
 Never leaves the repository partially modified.
 """
 
+import hashlib  # S2: cryptographic hash for checksums
 import json
 import os
 import shutil
@@ -55,7 +56,7 @@ class RollbackManager:
                     path=relative_path,
                     content=content,
                     existed=True,
-                    checksum=str(hash(content)),
+                    checksum=hashlib.sha256(content.encode()).hexdigest(),  # S2: use SHA-256 instead of unstable hash()
                 ))
             except (OSError, UnicodeDecodeError):
                 # Binary file or unreadable — skip

@@ -21,8 +21,8 @@ class Timing:
 
 
 @dataclass
-class BuildMetrics:
-    """Complete metrics for a single build."""
+class TimingMetrics:  # C1: Renamed from BuildMetrics to avoid collision with interfaces.BuildMetrics
+    """Complete timing and count metrics for a single build."""
 
     # Timing
     planning_time_ms: int = 0
@@ -87,7 +87,7 @@ class MetricsCollector:
     """Collects timing and count metrics during a build."""
 
     def __init__(self):
-        self.metrics = BuildMetrics()
+        self.metrics = TimingMetrics()  # C1: TimingMetrics replaces old BuildMetrics
         self._start = time.time()
         self._timers: dict[str, float] = {}
 

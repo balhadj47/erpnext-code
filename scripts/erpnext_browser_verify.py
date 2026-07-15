@@ -286,10 +286,7 @@ class ERPNextBrowserVerifier:
         with sync_playwright() as p:
             self.playwright = p
             self.browser = p.chromium.launch(
-                headless=self.headless,
-                executable_path="/tmp/playwright-browsers/chromium-1217/chrome-linux64/chrome"
-                if os.path.exists("/tmp/playwright-browsers/chromium-1217/chrome-linux64/chrome")
-                else None,
+                headless=self.headless,  # H4: let Playwright auto-discover browsers
             )
             self.page = self.browser.new_page(viewport={"width": 1440, "height": 900})
 
@@ -317,10 +314,7 @@ class ERPNextBrowserVerifier:
         with sync_playwright() as p:
             self.playwright = p
             self.browser = p.chromium.launch(
-                headless=self.headless,
-                executable_path="/tmp/playwright-browsers/chromium-1217/chrome-linux64/chrome"
-                if os.path.exists("/tmp/playwright-browsers/chromium-1217/chrome-linux64/chrome")
-                else None,
+                headless=self.headless,  # H4: let Playwright auto-discover browsers
             )
             self.page = self.browser.new_page(viewport={"width": 1440, "height": 900})
 
@@ -414,10 +408,7 @@ def main():
         with sync_playwright() as p:
             verifier.playwright = p
             verifier.browser = p.chromium.launch(
-                headless=args.headless,
-                executable_path="/tmp/playwright-browsers/chromium-1217/chrome-linux64/chrome"
-                if os.path.exists("/tmp/playwright-browsers/chromium-1217/chrome-linux64/chrome")
-                else None,
+                headless=args.headless,  # H4: let Playwright auto-discover browsers
             )
             verifier.page = verifier.browser.new_page()
             verifier.test_login()

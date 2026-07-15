@@ -6,7 +6,6 @@ Cache invalidates when any tracked file's mtime changes.
 
 import json
 import os
-import pickle
 from pathlib import Path
 from typing import Any
 
@@ -24,7 +23,7 @@ class ProjectModelCache(ICache):
     def _cache_path(self, app_path: str) -> Path:
         """Get the cache file path for an app."""
         safe_name = Path(app_path).resolve().name
-        return self.cache_dir / f"{safe_name}.pickle"
+        return self.cache_dir / f"{safe_name}.json"  # H3/S1: JSON instead of pickle
 
     def _scan_mtimes(self, app_path: str) -> dict[str, float]:
         """Scan mtimes of all tracked files."""
@@ -63,18 +62,62 @@ class ProjectModelCache(ICache):
             return None
         cache_file = self._cache_path(app_path)
         try:
-            with open(cache_file, "rb") as f:
-                return pickle.load(f)
-        except (pickle.PickleError, OSError):
+            with open(cache_file, "r") as f:
+                data = json.load(f)
+            return self._graph_from_dict(data)
+        except (json.JSONDecodeError, OSError, TypeError):
             return None
+
+    def _graph_from_dict(self, data: dict) -> ArtifactGraph:
+        """Reconstruct ArtifactGraph from JSON dict. (H3/S1: JSON replaces pickle)"""
+        from .interfaces import DocTypeDef
+        import dataclasses
+        docs = {}
+        for name, d in data.get("doctypes", {}).items():
+            docs[name] = DocTypeDef(**d)
+        childs = {}
+        for name, d in data.get("child_tables", {}).items():
+            childs[name] = DocTypeDef(**d)
+        return ArtifactGraph(
+            app_name=data.get("app_name", ""),
+            app_path=data.get("app_path", ""),
+            modules=data.get("modules", []),
+            doctypes=docs,
+            child_tables=childs,
+            hooks=data.get("hooks", {}),
+            patches=data.get("patches", []),
+            fixtures=data.get("fixtures", {}),
+            workspaces=data.get("workspaces", []),
+            reports=data.get("reports", []),
+            dashboards=data.get("dashboards", []),
+            dependency_order=data.get("dependency_order", []),
+        )
+
+    def _graph_to_dict(self, graph: ArtifactGraph) -> dict:
+        """Serialize ArtifactGraph to JSON-safe dict. (H3/S1: JSON replaces pickle)"""
+        import dataclasses
+        return {
+            "app_name": graph.app_name,
+            "app_path": graph.app_path,
+            "modules": graph.modules,
+            "doctypes": {n: dataclasses.asdict(d) for n, d in graph.doctypes.items()},
+            "child_tables": {n: dataclasses.asdict(d) for n, d in graph.child_tables.items()},
+            "hooks": graph.hooks,
+            "patches": graph.patches,
+            "fixtures": graph.fixtures,
+            "workspaces": graph.workspaces,
+            "reports": graph.reports,
+            "dashboards": graph.dashboards,
+            "dependency_order": graph.dependency_order,
+        }
 
     def put_graph(self, app_path: str, graph: ArtifactGraph):
         """Cache the artifact graph with current mtimes."""
         cache_file = self._cache_path(app_path)
         meta_file = self.cache_dir / f"{Path(app_path).resolve().name}_meta.json"
         try:
-            with open(cache_file, "wb") as f:
-                pickle.dump(graph, f)
+            with open(cache_file, "w") as f:
+                json.dump(self._graph_to_dict(graph), f)  # H3/S1: JSON instead of pickle
             mtimes = self._scan_mtimes(app_path)
             meta_file.write_text(json.dumps(mtimes, indent=2))
         except OSError:

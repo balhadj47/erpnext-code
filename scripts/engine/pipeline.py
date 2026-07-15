@@ -72,6 +72,7 @@ class Pipeline:
         self.fixer = fixer
         self.verifier = verifier
         self.plugin_executor = PluginExecutor()
+        self._executor_fn = lambda t, ctx: self.plugin_executor.execute(t, ctx)  # H2: extract duplicate lambda
         self.scheduler = ParallelScheduler()
         self.gates = GateRunner(strict=strict_gates)
         self.metrics_collector = MetricsCollector()
@@ -146,7 +147,7 @@ class Pipeline:
         self.metrics_collector.finish()
         self.journal.record_metrics(build_id, metrics)
         gates_summary = self.gates.summary()
-        self.journal.write_health_report(build_id, gates_summary, metrics.to_dict(), tasks)
+        self.journal.write_report(build_id, tasks, metrics, gates_summary)  # H8: unified single report
 
         # Rollback if gates failed
         if self.gates.has_failures() and self.rollback.has_snapshots():
@@ -155,8 +156,6 @@ class Pipeline:
             print(f"  Restored {len(restored)} files")
 
         report_path = build_dir / "final_report.md"
-        if report_path.exists():
-            self.journal.write_report(build_id, tasks, metrics)
 
         return {
             "build_id": build_id,
@@ -194,7 +193,7 @@ class Pipeline:
                 with self.metrics_collector.phase(f"task_{task.id}"):
                     result = executor.execute_with_validation(
                         task, context,
-                        lambda t, ctx: self.plugin_executor.execute(t, ctx),
+                        self._executor_fn,  # H2: use extracted function
                     )
 
                 self.journal.record_task(build_id, result)
@@ -216,7 +215,7 @@ class Pipeline:
                     continue
                 result = executor.execute_with_validation(
                     task, context,
-                    lambda t, ctx: self.plugin_executor.execute(t, ctx),
+                    self._executor_fn,  # H2: use extracted function
                 )
                 self.journal.record_task(build_id, result)
                 self._update_metrics(metrics, result)
@@ -226,7 +225,7 @@ class Pipeline:
                     group,
                     lambda t: executor.execute_with_validation(
                         t, context,
-                        lambda tt, ctx: self.plugin_executor.execute(tt, ctx),
+                        self._executor_fn,  # H2: use extracted function
                     ),
                 )
                 for result in results:
@@ -252,12 +251,12 @@ class Pipeline:
         """Run post-execution verification gates."""
         # Static validation
         with self.metrics_collector.phase("validation"):
-            self.gates.pass_gate("static_validation", "Passed")
-            self.gates.pass_gate("python_syntax", "Passed")
-            self.gates.pass_gate("json_validation", "Passed")
-            self.gates.pass_gate("hooks_validation", "Valid")
-            self.gates.pass_gate("fixture_validation", "Valid")
-            self.gates.pass_gate("import_validation", "Clean")
+            self.gates.skip_gate("static_validation", "Not yet implemented")  # H1: was fake pass_gate
+            self.gates.skip_gate("python_syntax", "Not yet implemented")  # H1: was fake pass_gate
+            self.gates.skip_gate("json_validation", "Not yet implemented")  # H1: was fake pass_gate
+            self.gates.skip_gate("hooks_validation", "Not yet implemented")  # H1: was fake pass_gate
+            self.gates.skip_gate("fixture_validation", "Not yet implemented")  # H1: was fake pass_gate
+            self.gates.skip_gate("import_validation", "Not yet implemented")  # H1: was fake pass_gate
 
         # Bench (if available)
         with self.metrics_collector.phase("bench"):

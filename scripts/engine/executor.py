@@ -14,7 +14,6 @@ from datetime import datetime
 from .interfaces import (
     ExecutionContext,
     GeneratedFile,
-    IExecutor,
     IRecovery,
     IValidator,
     Task,
@@ -24,17 +23,12 @@ from .interfaces import (
 )
 
 
-class IncrementalExecutor(IExecutor):
+class IncrementalExecutor:  # C3: no longer inherits IExecutor (LSP violation — execute() raised NotImplementedError)
     """Executes tasks one at a time with immediate validation."""
 
     def __init__(self, validator: IValidator, recovery: IRecovery):
         self.validator = validator
         self.recovery = recovery
-
-    def execute(self, task: Task, context: ExecutionContext) -> list[GeneratedFile]:
-        """Execute a task and produce files. Implementation injected by plugins."""
-        # This is the interface method — actual execution happens in PluginExecutor
-        raise NotImplementedError("Use PluginExecutor which wraps the LLM/script execution")
 
     def execute_with_validation(
         self,
@@ -106,16 +100,7 @@ class PluginExecutor:
     """
 
     def __init__(self):
-        self._module_templates = {
-            "field_service": {
-                "doctypes": ["Site Visit", "Inspection Report", "Work Order", "Crew", "Equipment"],
-                "child_tables": ["Site Visit Photo", "Inspection Checklist Item", "Crew Member"],
-            },
-            "contractor": {
-                "doctypes": ["Contractor", "Contract", "Compliance Check", "Trade", "Site"],
-                "child_tables": ["Contractor Document", "Compliance Item"],
-            },
-        }
+        pass  # C2: module templates now in engine/templates.py
 
     def execute(self, task: Task, context: ExecutionContext) -> list[GeneratedFile]:
         """Execute a task and return generated files."""
