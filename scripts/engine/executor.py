@@ -1,0 +1,254 @@
+"""Phase 1: Incremental Executor
+
+Executes one task at a time. After each task:
+  1. Generate files
+  2. Validate files (syntax + structure + references)
+  3. If valid → accept, continue to next task
+  4. If invalid → classify error, attempt repair, retry
+  5. If still invalid after max attempts → mark BLOCKED, continue independent tasks
+"""
+
+import time
+from datetime import datetime
+
+from .interfaces import (
+    ExecutionContext,
+    GeneratedFile,
+    IExecutor,
+    IRecovery,
+    IValidator,
+    Task,
+    TaskResult,
+    TaskStatus,
+    ValidationLevel,
+)
+
+
+class IncrementalExecutor(IExecutor):
+    """Executes tasks one at a time with immediate validation."""
+
+    def __init__(self, validator: IValidator, recovery: IRecovery):
+        self.validator = validator
+        self.recovery = recovery
+
+    def execute(self, task: Task, context: ExecutionContext) -> list[GeneratedFile]:
+        """Execute a task and produce files. Implementation injected by plugins."""
+        # This is the interface method — actual execution happens in PluginExecutor
+        raise NotImplementedError("Use PluginExecutor which wraps the LLM/script execution")
+
+    def execute_with_validation(
+        self,
+        task: Task,
+        context: ExecutionContext,
+        executor_fn,
+    ) -> TaskResult:
+        """Full execute-validate-repair cycle for one task."""
+        start = time.time()
+        task.status = TaskStatus.IN_PROGRESS
+        result = TaskResult(task_id=task.id, status=TaskStatus.IN_PROGRESS, attempt=1)
+
+        for attempt in range(1, task.max_attempts + 1):
+            result.attempt = attempt
+            task.attempts = attempt
+
+            try:
+                # Step 1: Generate
+                files = executor_fn(task, context)
+                result.files = files
+
+                # Step 2: Validate
+                validation = self.validator.validate(files, context.graph, ValidationLevel.STRUCTURE)
+                result.validation = validation
+
+                if validation.passed:
+                    # Step 3: Accept
+                    for f in files:
+                        f.validated = True
+                    result.status = TaskStatus.COMPLETED
+                    result.duration_ms = int((time.time() - start) * 1000)
+                    return result
+
+                # Step 4: Classify and repair
+                error_str = "; ".join(validation.errors)
+                task.errors.append(error_str)
+                category = self.recovery.classify(error_str, task, files)
+
+                if attempt < task.max_attempts:
+                    repair = self.recovery.repair(category, task, files, context)
+                    result.repair = repair
+                    if repair.success:
+                        # Retry after repair
+                        continue
+
+            except Exception as e:
+                error_str = str(e)
+                task.errors.append(error_str)
+                category = self.recovery.classify(error_str, task, files)
+
+                if attempt < task.max_attempts:
+                    repair = self.recovery.repair(category, task, files, context)
+                    result.repair = repair
+                    if repair.success:
+                        continue
+
+        # All attempts exhausted
+        result.status = TaskStatus.BLOCKED if task.attempts >= task.max_attempts else TaskStatus.FAILED
+        result.error = "; ".join(task.errors[-3:])  # Last 3 errors
+        result.duration_ms = int((time.time() - start) * 1000)
+        return result
+
+
+class PluginExecutor:
+    """Executes a task by delegating to the appropriate plugin.
+
+    For now, tasks are 'generated' as placeholders. In production,
+    an LLM-backed executor would generate actual code here.
+    """
+
+    def __init__(self):
+        self._module_templates = {
+            "field_service": {
+                "doctypes": ["Site Visit", "Inspection Report", "Work Order", "Crew", "Equipment"],
+                "child_tables": ["Site Visit Photo", "Inspection Checklist Item", "Crew Member"],
+            },
+            "contractor": {
+                "doctypes": ["Contractor", "Contract", "Compliance Check", "Trade", "Site"],
+                "child_tables": ["Contractor Document", "Compliance Item"],
+            },
+        }
+
+    def execute(self, task: Task, context: ExecutionContext) -> list[GeneratedFile]:
+        """Execute a task and return generated files."""
+        files: list[GeneratedFile] = []
+
+        if task.category == "doctype":
+            files.append(self._generate_doctype_json(task, context))
+            files.append(self._generate_doctype_py(task, context))
+        elif task.category == "child_table":
+            files.append(self._generate_child_table_json(task, context))
+        elif task.category == "hook":
+            files.append(self._generate_pyproject(task, context))
+        elif task.category == "fixture":
+            pass  # Generated by export-fixtures
+        elif task.category == "permission":
+            pass  # Generated with DocTypes
+        elif task.category == "workspace":
+            files.append(self._generate_workspace(task, context))
+        elif task.category == "test":
+            files.append(self._generate_test(task, context))
+        elif task.category == "doc":
+            pass  # Documentation tasks
+
+        return files
+
+    def _generate_doctype_json(self, task: Task, ctx: ExecutionContext) -> GeneratedFile:
+        import json
+        dt_name = task.target_name or task.name.replace("DocType: ", "")
+        module_name = self._guess_module(dt_name, ctx)
+        path = f"{ctx.app_path.name}/{module_name}/doctype/{dt_name.lower().replace(' ', '_')}/{dt_name.lower().replace(' ', '_')}.json"
+
+        data = {
+            "doctype": "DocType",
+            "name": dt_name,
+            "module": module_name.replace("_", " ").title(),
+            "istable": 0,
+            "is_submittable": 1 if dt_name in ("Work Order", "Inspection Report") else 0,
+            "fields": [
+                {"fieldname": "title", "fieldtype": "Data", "label": "Title", "reqd": 1},
+                {"fieldname": "status", "fieldtype": "Select", "label": "Status",
+                 "options": "Draft\nActive\nCompleted\nCancelled"},
+                {"fieldname": "company", "fieldtype": "Link", "label": "Company", "options": "Company"},
+            ],
+            "permissions": [
+                {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1}
+            ],
+        }
+        return GeneratedFile(path=path, content=json.dumps(data, indent=2), category="json")
+
+    def _generate_doctype_py(self, task: Task, ctx: ExecutionContext) -> GeneratedFile:
+        dt_name = task.target_name or task.name.replace("DocType: ", "")
+        module_name = self._guess_module(dt_name, ctx)
+        path = f"{ctx.app_path.name}/{module_name}/doctype/{dt_name.lower().replace(' ', '_')}/{dt_name.lower().replace(' ', '_')}.py"
+
+        content = f'''import frappe
+from frappe.model.document import Document
+
+class {dt_name.replace(" ", "")}(Document):
+    def validate(self):
+        pass
+'''
+        return GeneratedFile(path=path, content=content, category="python")
+
+    def _generate_child_table_json(self, task: Task, ctx: ExecutionContext) -> GeneratedFile:
+        import json
+        dt_name = task.target_name or task.name.replace("DocType: ", "")
+        module_name = self._guess_module(dt_name, ctx)
+        path = f"{ctx.app_path.name}/{module_name}/doctype/{dt_name.lower().replace(' ', '_')}/{dt_name.lower().replace(' ', '_')}.json"
+
+        data = {
+            "doctype": "DocType",
+            "name": dt_name,
+            "module": module_name.replace("_", " ").title(),
+            "istable": 1,
+            "fields": [
+                {"fieldname": "description", "fieldtype": "Data", "label": "Description"},
+            ],
+        }
+        return GeneratedFile(path=path, content=json.dumps(data, indent=2), category="json")
+
+    def _generate_pyproject(self, task: Task, ctx: ExecutionContext) -> GeneratedFile:
+        content = f'''[project]
+name = "{ctx.app_path.name}"
+version = "0.1.0"
+description = "{ctx.app_path.name} — ERPNext custom app"
+requires-python = ">=3.10"
+
+[project.entry-points]
+frappe = {{
+    "{ctx.app_path.name}" = "{ctx.app_path.name}"
+}}
+'''
+        return GeneratedFile(path="pyproject.toml", content=content, category="toml")
+
+    def _generate_workspace(self, task: Task, ctx: ExecutionContext) -> GeneratedFile:
+        import json
+        if not ctx.graph.modules:
+            return GeneratedFile(path="", content="")
+        module = ctx.graph.modules[0]
+        safe_module = module.lower().replace(" ", "_")
+        path = f"{ctx.app_path.name}/{safe_module}/workspace/{safe_module}.json"
+        data = {
+            "doctype": "Workspace",
+            "name": module,
+            "module": module,
+            "for_user": "",
+            "content": json.dumps([]),
+        }
+        return GeneratedFile(path=path, content=json.dumps(data, indent=2), category="json")
+
+    def _generate_test(self, task: Task, ctx: ExecutionContext) -> GeneratedFile:
+        dt_list = list(ctx.graph.doctypes.keys())[:1]
+        if not dt_list:
+            return GeneratedFile(path="", content="")
+        dt_name = dt_list[0]
+        module = ctx.graph.doctypes[dt_name].module.lower().replace(" ", "_")
+        path = f"{ctx.app_path.name}/{module}/doctype/{dt_name.lower().replace(' ', '_')}/test_{dt_name.lower().replace(' ', '_')}.py"
+        content = f'''import frappe
+from frappe.tests import IntegrationTestCase
+
+class Test{dt_name.replace(" ", "")}(IntegrationTestCase):
+    def test_create(self):
+        doc = frappe.get_doc({{
+            "doctype": "{dt_name}",
+            "title": "Test",
+        }})
+        doc.insert()
+        self.assertIsNotNone(doc.name)
+'''
+        return GeneratedFile(path=path, content=content, category="python")
+
+    def _guess_module(self, dt_name: str, ctx: ExecutionContext) -> str:
+        """Guess which module a DocType belongs to."""
+        if ctx.graph.modules:
+            return ctx.graph.modules[0].lower().replace(" ", "_")
+        return ctx.app_path.name

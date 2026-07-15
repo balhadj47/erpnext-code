@@ -1,0 +1,89 @@
+{
+  "goal": "Build a field service module",
+  "tasks": [
+    {
+      "id": "T1",
+      "name": "App scaffold",
+      "category": "hook",
+      "depends_on": []
+    },
+    {
+      "id": "T2",
+      "name": "pyproject.toml",
+      "category": "hook",
+      "depends_on": []
+    },
+    {
+      "id": "T3",
+      "name": "Custom Fields",
+      "category": "fixture",
+      "depends_on": []
+    },
+    {
+      "id": "T4",
+      "name": "Role Permissions",
+      "category": "permission",
+      "depends_on": []
+    },
+    {
+      "id": "T5",
+      "name": "Workspace",
+      "category": "workspace",
+      "depends_on": []
+    },
+    {
+      "id": "T6",
+      "name": "Reports",
+      "category": "report",
+      "depends_on": []
+    },
+    {
+      "id": "T7",
+      "name": "Dashboard",
+      "category": "dashboard",
+      "depends_on": []
+    },
+    {
+      "id": "T8",
+      "name": "Unit Tests",
+      "category": "test",
+      "depends_on": []
+    },
+    {
+      "id": "T9",
+      "name": "README",
+      "category": "doc",
+      "depends_on": []
+    },
+    {
+      "id": "T10",
+      "name": "CHANGELOG",
+      "category": "doc",
+      "depends_on": []
+    },
+    {
+      "id": "T11",
+      "name": "Bench migrate",
+      "category": "verify",
+      "depends_on": [
+        "T1",
+        "T2",
+        "T3",
+        "T4",
+        "T5"
+      ]
+    },
+    {
+      "id": "T12",
+      "name": "Analyze",
+      "category": "verify",
+      "depends_on": []
+    },
+    {
+      "id": "T13",
+      "name": "Browser QA",
+      "category": "verify",
+      "depends_on": []
+    }
+  ]
+}

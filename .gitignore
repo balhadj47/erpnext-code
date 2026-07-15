@@ -1,0 +1,14 @@
+node_modules/
+.bun/
+dist/
+*.pyc
+__pycache__/
+.builds/.cache/
+*.pickle
+*_meta.json
+cli-dev
+cli
+dist/
+cli-dev
+cli
+dist/

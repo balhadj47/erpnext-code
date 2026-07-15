@@ -1,0 +1,15 @@
+{
+  "total_duration_ms": 0,
+  "tasks_total": 13,
+  "tasks_completed": 11,
+  "tasks_failed": 0,
+  "tasks_blocked": 1,
+  "tasks_skipped": 1,
+  "repairs_attempted": 1,
+  "repairs_succeeded": 0,
+  "validations_run": 12,
+  "validations_passed": 11,
+  "files_generated": 4,
+  "files_validated": 0,
+  "iterations": 1
+}

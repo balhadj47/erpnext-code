@@ -1,0 +1,13 @@
+[2026-07-15T18:54:31.775874] Build started: Build a test module
+[2026-07-15T18:54:31.777576] ✓ T1: completed (attempt 1, 0ms)
+[2026-07-15T18:54:31.777714] ✓ T2: completed (attempt 1, 0ms)
+[2026-07-15T18:54:31.777889] ✓ T3: completed (attempt 1, 0ms)
+[2026-07-15T18:54:31.777969] ✓ T4: completed (attempt 1, 0ms)
+[2026-07-15T18:54:31.778155] ⊘ T5: blocked (attempt 3, 0ms) — test_app/core/workspace/core.json: missing 'fields' array; test_app/core/workspace/core.json: DocType 'core' has no permissions; test_app/core/workspace/core.json: missing 'fields' array; test_app/cor
+[2026-07-15T18:54:31.778460] ✓ T6: completed (attempt 1, 0ms)
+[2026-07-15T18:54:31.778511] ✓ T7: completed (attempt 1, 0ms)
+[2026-07-15T18:54:31.778556] ✓ T8: completed (attempt 1, 0ms)
+[2026-07-15T18:54:31.778731] ✓ T9: completed (attempt 1, 0ms)
+[2026-07-15T18:54:31.778779] ✓ T10: completed (attempt 1, 0ms)
+[2026-07-15T18:54:31.778819] ✓ T12: completed (attempt 1, 0ms)
+[2026-07-15T18:54:31.778854] ✓ T13: completed (attempt 1, 0ms)

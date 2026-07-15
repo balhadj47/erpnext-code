@@ -1,0 +1,12 @@
+[project]
+name = "erpnext-code"
+version = "0.1.0"
+description = "erpnext-code — ERPNext custom app"
+authors = [{ name = "Developer" }]
+requires-python = ">=3.10"
+dependencies = []
+
+[project.entry-points]
+frappe = {
+    "erpnext-code" = "erpnext-code"
+}

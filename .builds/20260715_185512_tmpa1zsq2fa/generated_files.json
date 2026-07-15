@@ -1,0 +1,26 @@
+[
+  {
+    "task_id": "T1",
+    "path": "pyproject.toml",
+    "category": "toml",
+    "validated": true
+  },
+  {
+    "task_id": "T2",
+    "path": "pyproject.toml",
+    "category": "toml",
+    "validated": true
+  },
+  {
+    "task_id": "T5",
+    "path": "",
+    "category": "",
+    "validated": true
+  },
+  {
+    "task_id": "T8",
+    "path": "",
+    "category": "",
+    "validated": true
+  }
+]
