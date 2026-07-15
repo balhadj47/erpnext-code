@@ -1,8 +1,0 @@
-[
-  {
-    "task_id": "T5",
-    "attempt": 3,
-    "error": "test_app/core/workspace/core.json: missing 'fields' array; test_app/core/workspace/core.json: DocType 'core' has no permissions; test_app/core/workspace/core.json: missing 'fields' array; test_app/core/workspace/core.json: DocType 'core' has no permissions; test_app/core/workspace/core.json: missing 'fields' array; test_app/core/workspace/core.json: DocType 'core' has no permissions",
-    "repair": []
-  }
-]
